@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Redux Contact Chips</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/redux/3.7.2/redux.min.js"></script>
+    <script src="https://unpkg.com/react@16.3.0-alpha.1/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@16.3.0-alpha.1/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6.15.0/babel.min.js"></script>
+    <script src="https://unpkg.com/redux-thunk@2.2.0/dist/redux-thunk.min.js"></script>
+    <script src='https://unpkg.com/react-redux@5.0.6/dist/react-redux.min.js'></script>
+    <script src="data/index.js"></script>
+    <link rel="stylesheet" type="text/css" href="mystyle.css">
+  </head>
+  <body>
+    <!--
+    <div class="alert">
+      <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+      <strong>Info!</strong> Your contact list is empty...
+    </div>
+    -->
+    <div id='app'>
+
+    </div>
+    <script type="text/javascript">
+      //ID GENERATOR
+      function generateId () {
+        return Math.random().toString(36).substring(2) + (new Date()).getTime().toString(36);
+      }
+
+      const ADD_CONTACT = 'ADD_CONTACT'
+      const REMOVE_CONTACT = 'REMOVE_CONTACT'
+      const BLOCK_CONTACT = 'BLOCK_CONTACT'
+      const RECEIVE_DATA = 'RECEIVE_DATA'
+
+      //ACTION CREATORS
+      function addContactAction (contact) {
+        return {
+          type: ADD_CONTACT,
+          contact,
+        }
+      }
+
+      function removeContactAction (id) {
+        return {
+          type: REMOVE_CONTACT,
+          id,
+        }
+      }
+
+      function blockContactAction (id) {
+        return {
+          type: BLOCK_CONTACT,
+          id,
+        }
+      }
+
+      function receiveDataAction (contacts) {
+        return {
+          type: RECEIVE_DATA,
+          contacts,
+        }
+      }
+
+      function handleDeleteContact (contact) {
+        return (dispatch) => {
+          dispatch(removeContactAction(contact.id))
+
+          return API.deleteContact(contact.id)
+            .catch(() => {
+              dispatch(addContactAction(contact))
+              alert('an error accurred. try again.')
+            })
+        }
+      }
+
+      function handleAddContact (name, gender, email, nb, eb) {
+        return (dispatch) => {
+          return API.saveContact(name, gender, email)
+            .then((contact) => {
+              dispatch(addContactAction(contact))
+              nb()
+              eb()
+            })
+            .catch(() => {
+              alert('an error accurred. try again.')
+            })
+        }
+      }
+
+      function handleBlockContact (id) {
+        return (dispatch) => {
+          dispatch(blockContactAction(id))
+
+          return API.saveContactBlock(id)
+            .catch(() => {
+              dispatch(blockContactAction(id))
+              alert('an error accurred. try again.')
+            })
+        }
+      }
+
+      function handleInitialData () {
+        return (dispatch) => {
+          Promise.all([
+            API.fetchContacts()
+          ]).then(([ contacts ]) => {
+            dispatch(receiveDataAction(contacts))
+          })
+        }
+      }
+
+      //REDUCER
+      function contacts (state = [], action) {
+        switch(action.type) {
+          case ADD_CONTACT :
+            return state.concat([action.contact])
+          case REMOVE_CONTACT :
+            return state.filter((contact) => contact.id !== action.id)
+          case BLOCK_CONTACT :
+            return state.map((contact) => contact.id !== action.id ? contact :
+              Object.assign({}, contact, { block: !contact.block }))
+          case RECEIVE_DATA :
+            return action.contacts
+          default :
+            return state
+        }
+      }
+
+      function loading (state = true, action) {
+        switch (action.type) {
+          case RECEIVE_DATA:
+            return false
+          default:
+            return state
+        }
+      }
+
+      //helper method to generate blockedMessage
+      function popupMessage (name, msg) {
+        const div = document.createElement('div')
+        div.setAttribute('id', 'snackbar')
+        div.classList.add('show')
+        setTimeout(() => {
+          div.classList.remove('show')
+        }, 3000)
+        const message = document.createTextNode(name+msg)
+        div.appendChild(message)
+        document.getElementById('contacts').appendChild(div)
+        return div
+      }
+      //this middleware method checks the action show a message and then dispath
+      //the action. and we will use this as the normal dispath method
+      const checker = (store) => (next) => (action) => {
+        if (action.type === ADD_CONTACT) {
+          next(action)
+          return popupMessage(action.contact.name,' added!')
+        }
+
+        if (action.type === REMOVE_CONTACT) {
+          //const name = action.contact.name
+          next(action)
+          return popupMessage('A contact was', ' removed')
+        }
+
+        if (action.type === BLOCK_CONTACT) {
+          //const name = action.contact.name
+          next(action)
+          return popupMessage('A contact was', ' blocked')
+        }
+
+        if (action.type === RECEIVE_DATA) {
+          //const name = action.contact.name
+          next(action)
+          return popupMessage('data', ' received')
+        }
+      }
+
+      //This logger middleware helps us in development process it tells us
+      //which action owas dispatched and what is our current sate
+      const logger = (store) => (next) => (action) => {
+        console.group(action.type)
+          console.log('The action: ', action)
+          const result = next(action)
+          console.log('The new state: ', store.getState())
+        console.groupEnd()
+        return result
+      }
+
+      const store = Redux.createStore(Redux.combineReducers({
+        contacts,
+        loading,
+      }), Redux.applyMiddleware(ReduxThunk.default, checker, logger))
+    </script>
+
+    <script type="text/babel">
+      function List (props) {
+
+        return (
+          <main id="contacts">
+            {props.items.map((item) => (
+              <div className='chip' key={item.id}>
+                <img src={item.gender === 'male' ? 'img_avatar.png' : 'img_avatar2.png'} alt='Person' width='96' height='96' />
+                {item.name}
+                <label className="switch">
+                  <input type="checkbox" onChange={() => props.blockContact(item.id) } defaultChecked={item.block} />
+                  <span className="slider round"></span>
+                </label>
+                <span className='closebtn' onClick={() => props.remove(item)} >&times;</span>
+              </div>
+            ))}
+          </main>
+        )
+      }
+
+      class Contacts extends React.Component {
+        addItem = (e) => {
+          e.preventDefault()
+
+          if (this.nameInput.value.length == 0 ||
+              this.genderInput.value.length == 0 ||
+              this.emailInput.value.length == 0) {
+
+            alert('no empty fields please.')
+
+          } else {
+
+            this.props.dispatch(handleAddContact(
+              this.nameInput.value,
+              this.genderInput.value,
+              this.emailInput.value,
+              () => this.nameInput.value = '',
+              () => this.emailInput.value = ''
+            ))
+          }
+        }
+
+        removeItem = (contact) => {
+          this.props.dispatch(handleDeleteContact(contact))
+        }
+
+        blockContact = (id) => {
+          this.props.dispatch(handleBlockContact(id))
+
+        }
+        render() {
+          return (
+            <div>
+              <header>
+                <div className="inputForm">
+                  <input
+                    type="text" id="name"
+                    placeholder="Name"
+                    ref={(nameInput) => this.nameInput = nameInput}
+                  />
+                  <select id="gender" ref={(genderInput) => this.genderInput = genderInput}>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                  <input
+                    type="email"
+                    id="email"
+                    placeholder="Email"
+                    ref={(emailInput) => this.emailInput = emailInput}
+                  />
+                  <button id='contactBtn' onClick={this.addItem}>Add Contact</button>
+                </div>
+              </header>
+              <List items={this.props.contacts} remove={this.removeItem} blockContact={this.blockContact} />
+            </div>
+          )
+        }
+      }
+
+      const ConnectedContacts = ReactRedux.connect((state) => ({
+        contacts: state.contacts
+      }))(Contacts)
+
+      class App extends React.Component {
+        componentDidMount () {
+          const { dispatch } = this.props
+
+          dispatch(handleInitialData())
+        }
+        render() {
+          if (this.props.loading === true) {
+            return <h3>Loading...</h3>
+          }
+
+          return (
+            <div>
+              <ConnectedContacts />
+            </div>
+          )
+        }
+      }
+
+
+      const ConnectedApp = ReactRedux.connect((state) => ({
+        loading: state.loading
+      }))(App)
+
+
+      ReactDOM.render(
+        <ReactRedux.Provider store={store}>
+          <ConnectedApp />
+        </ReactRedux.Provider>,
+        document.getElementById('app')
+      )
+    </script>
+  </body>
+</html>
